@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Sparkles, ShieldAlert, Users2, ChevronRight, Crown, X } from 'lucide-react';
+import { Sparkles, ShieldAlert, Users2, ChevronRight, Crown, X, Scale } from 'lucide-react';
 import { typeColor } from '@/lib/mbti';
 import { TYPE_IMAGES } from '@/lib/type-images';
 import { programmingTypeTable } from '@/lib/mbti-programming';
@@ -9,6 +9,7 @@ import { serviceTypeTable } from '@/lib/mbti-service';
 import { presentationTypeTable } from '@/lib/mbti-presentation';
 import { designTypeTable } from '@/lib/mbti-design';
 import type { MbtiTypeInfo } from '@/lib/mbti';
+import MatchingMethodInfo from './MatchingMethodInfo';
 
 const TYPE_TABLES: Record<string, Record<string, MbtiTypeInfo>> = {
   programming: programmingTypeTable,
@@ -38,6 +39,7 @@ export interface RoomInsights {
   bestPairs: SynergyNote[];
   cautionPairs: SynergyNote[];
   recommendedTypes: RoomTypeRecommendation[];
+  skillDataCoverage: { membersWithHistory: number; totalMembers: number };
 }
 interface MemberLite { gmail: string; name: string; }
 
@@ -99,7 +101,10 @@ export default function RoomCompatibilityInsights({
   const nameOf = (gmail: string) => members.find((m) => m.gmail === gmail)?.name ?? gmail;
 
   const hasAnyData =
-    roomInsights.bestPairs.length > 0 || roomInsights.cautionPairs.length > 0 || roomInsights.recommendedTypes.length > 0;
+    roomInsights.bestPairs.length > 0 ||
+    roomInsights.cautionPairs.length > 0 ||
+    roomInsights.recommendedTypes.length > 0 ||
+    roomInsights.skillDataCoverage.totalMembers > 0;
   if (!hasAnyData) return null;
 
   return (
@@ -118,6 +123,8 @@ export default function RoomCompatibilityInsights({
             เข้ากันดี {roomInsights.bestPairs.length} คู่
             {roomInsights.cautionPairs.length > 0 && ` · ควรระวัง ${roomInsights.cautionPairs.length} คู่`}
             {roomInsights.recommendedTypes.length > 0 && ` · แนะนำ ${roomInsights.recommendedTypes.length} type สำหรับ ${templateLabel}`}
+            {roomInsights.skillDataCoverage.totalMembers > 0 &&
+              ` · มีประวัติประเมิน ${roomInsights.skillDataCoverage.membersWithHistory}/${roomInsights.skillDataCoverage.totalMembers} คน`}
           </p>
         </div>
         <ChevronRight size={20} className="text-gray-300 flex-shrink-0" />
@@ -140,15 +147,32 @@ export default function RoomCompatibilityInsights({
                 </p>
                 <p className="text-white/60 text-xs mt-1">อิงจาก MBTI ของสมาชิกทุกคนที่ join ห้องนี้จริง</p>
               </div>
-              <button
-                onClick={() => setOpen(false)}
-                className="w-8 h-8 bg-white/20 hover:bg-white/30 rounded-full flex items-center justify-center text-white transition-all flex-shrink-0"
-              >
-                <X size={18} />
-              </button>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <MatchingMethodInfo iconSize={16} className="w-8 h-8 bg-white/20 hover:bg-white/30 rounded-full flex items-center justify-center text-white transition-all" />
+                <button
+                  onClick={() => setOpen(false)}
+                  className="w-8 h-8 bg-white/20 hover:bg-white/30 rounded-full flex items-center justify-center text-white transition-all"
+                >
+                  <X size={18} />
+                </button>
+              </div>
             </div>
 
             <div className="p-5 sm:p-6 flex flex-col gap-6 overflow-y-auto bg-[#FAFAFC]">
+              {roomInsights.skillDataCoverage.totalMembers > 0 && (
+                <div>
+                  <SectionHeader icon={<Scale size={14} />} iconBg="#EDE9FF" iconColor="#4B3E7A" title="คะแนนประเมินที่ใช้จับกลุ่มด้วย (30%)" />
+                  <div className="bg-white border border-[#EDE9FF] rounded-2xl p-3.5 shadow-sm flex items-center justify-between gap-3">
+                    <p className="text-xs text-gray-500 leading-relaxed">
+                      มีประวัติจากการประเมินเพื่อนร่วมทีมโปรเจกต์ก่อนหน้าแล้ว{' '}
+                      <span className="font-black text-[#4B3E7A]">
+                        {roomInsights.skillDataCoverage.membersWithHistory}/{roomInsights.skillDataCoverage.totalMembers} คน
+                      </span>{' '}
+                      — ที่เหลือเริ่มจากคะแนนกลางๆ ไม่เสียเปรียบ
+                    </p>
+                  </div>
+                </div>
+              )}
               {roomInsights.bestPairs.length > 0 && (
                 <div>
                   <SectionHeader

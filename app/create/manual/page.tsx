@@ -7,6 +7,7 @@ import Navbar from '../../navbar/page';
 import { resolveAvatar } from '@/lib/avatar';
 import { typeColor } from '@/lib/mbti';
 import DeadlinePicker from '../../components/DeadlinePicker';
+import MatchingMethodInfo from '../../components/MatchingMethodInfo';
 
 interface RoomMember { name: string; avatarSeed: number; avatarImage?: string | null; gmail: string; role?: string; }
 interface CurrentRoom {
@@ -320,6 +321,12 @@ const ManualPage = () => {
             >
               <BookOpen size={20} />
             </button>
+            {user?.name === room?.hostName && (
+              <MatchingMethodInfo
+                className="w-10 h-10 rounded-full bg-white flex items-center justify-center shadow-md hover:bg-white/90 active:scale-95 transition-all"
+                style={{ color: theme.accent }}
+              />
+            )}
             {/* Mobile-only: compact match button */}
             {isAllReady && (
               <button

@@ -35,6 +35,7 @@ function makeMembers(count: number, seed = 1): MatchInputMember[] {
       categoryKey,
       evalScore: Math.round(rand() * 100),
       skillVector,
+      evalCount: Math.floor(rand() * 6),
     };
   });
 }
@@ -110,7 +111,7 @@ describe('computeGroups — compatibility + skill-balance construction', () => {
 });
 
 function makeMember(gmail: string, code: string): MatchInputMember {
-  return { gmail, name: gmail, avatarSeed: 0, avatarImage: null, code, categoryKey: null, evalScore: 50, skillVector: CRITERIA_KEYS.map(() => 50) };
+  return { gmail, name: gmail, avatarSeed: 0, avatarImage: null, code, categoryKey: null, evalScore: 50, skillVector: CRITERIA_KEYS.map(() => 50), evalCount: 0 };
 }
 
 describe('buildRoomInsights — room-wide (cross-group) compatibility overview', () => {

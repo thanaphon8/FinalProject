@@ -185,6 +185,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ ro
           categoryKey: t?.code ? categoryKeyForCode(template, t.code) : null,
           evalScore: evalByName[key]?.overall ?? 50,
           skillVector: CRITERIA_KEYS.map((k) => criteria?.[k] ?? 50),
+          evalCount: evalByName[key]?.count ?? 0,
         };
       });
 

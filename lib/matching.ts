@@ -17,6 +17,8 @@ export interface MatchInputMember {
   evalScore: number;
   /** เวกเตอร์คะแนนรายเกณฑ์ 11 ด้าน — ใช้เป็น objective จริงสำหรับ skill balance */
   skillVector: SkillVector;
+  /** จำนวนครั้งที่เคยถูกเพื่อนร่วมทีมประเมินจริง (ก่อน trim/shrink) — ใช้แค่รายงานความครอบคลุมของข้อมูลให้ host เห็น ไม่ใช่ input ของอัลกอริทึม */
+  evalCount: number;
 }
 
 export interface ComputeGroupsInput {
@@ -371,6 +373,8 @@ export interface RoomInsights {
   cautionPairs: SynergyNote[];
   /** top 5 type ที่มีคนถืออยู่จริงในห้อง เรียงตามคะแนนเข้ากันเฉลี่ยกับ type อื่นที่มีอยู่จริงในห้องเดียวกัน */
   recommendedTypes: RoomTypeRecommendation[];
+  /** จำนวนสมาชิกที่มีประวัติเคยถูกประเมินจริง (evalCount > 0) เทียบกับสมาชิกทั้งหมด — ให้ host เห็นว่าคะแนน skill balance ที่ใช้จับกลุ่มมีข้อมูลรองรับมากแค่ไหน */
+  skillDataCoverage: { membersWithHistory: number; totalMembers: number };
 }
 
 const ROOM_BEST_PAIR_COUNT = 5;
@@ -418,5 +422,10 @@ export function buildRoomInsights(members: MatchInputMember[], template: string)
     .sort((a, b) => b.avgScore - a.avgScore)
     .slice(0, ROOM_RECOMMENDED_TYPE_COUNT);
 
-  return { bestPairs, cautionPairs, recommendedTypes };
+  const skillDataCoverage = {
+    membersWithHistory: members.filter((m) => m.evalCount > 0).length,
+    totalMembers: members.length,
+  };
+
+  return { bestPairs, cautionPairs, recommendedTypes, skillDataCoverage };
 }
