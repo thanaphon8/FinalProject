@@ -2,7 +2,7 @@ import { pairCompatibility, pairCompatibilityScoreFast, resolveAxisWeights } fro
 
 type AxisWeights = readonly [number, number, number, number];
 
-/** ค่าเฉลี่ยรายเกณฑ์ประเมิน 11 ด้าน (0-100 ต่อด้าน) เรียงตาม CRITERIA_KEYS */
+/** ค่าเฉลี่ยรายเกณฑ์ประเมิน 5 ด้าน (0-100 ต่อด้าน) เรียงตาม CRITERIA_KEYS */
 export type SkillVector = readonly number[];
 
 export interface MatchInputMember {
@@ -25,12 +25,15 @@ export interface ComputeGroupsInput {
   members: MatchInputMember[];
   groupSize: number;
   template: string;
+  useEvaluation?: boolean;
 }
 
 export interface MatchPlan {
   index: number;
   groups: MatchedGroupResult[];
   explanation: string;
+  compatibilityPercent: number;
+  evaluationUsed: boolean;
 }
 
 /** คู่สมาชิกที่มีสัญญาณเด่นในกลุ่ม — เข้ากันดีที่สุด หรือควรหลีกเลี่ยง (ถูกจับกลุ่มร่วมกันทั้งที่ควรเลี่ยง เพราะข้อจำกัดขนาดกลุ่ม) */
@@ -98,8 +101,9 @@ function skillBalance(skillVectors: SkillVector[], globalAvgVector: SkillVector)
 
 /** Objective function หลัก: ผสม MBTI compatibility กับ skill balance ตามน้ำหนักด้านบน ใช้ทั้งตอนเลือกกลุ่มให้สมาชิกใหม่
  * และตอน local search — ให้สองขั้นตอนเพิ่มประสิทธิภาพเป้าหมายเดียวกัน */
-function combinedGroupScore(codes: string[], skillVectors: SkillVector[], globalAvgVector: SkillVector, weights: AxisWeights): number {
-  return COMPATIBILITY_WEIGHT * normalizedGroupCompatibility(codes, weights) + SKILL_BALANCE_WEIGHT * skillBalance(skillVectors, globalAvgVector);
+function combinedGroupScore(codes: string[], skillVectors: SkillVector[], globalAvgVector: SkillVector, weights: AxisWeights, useEvaluation: boolean): number {
+  return COMPATIBILITY_WEIGHT * normalizedGroupCompatibility(codes, weights) +
+    (useEvaluation ? SKILL_BALANCE_WEIGHT * skillBalance(skillVectors, globalAvgVector) : 0);
 }
 
 function balancedCapacities(n: number, numGroups: number): number[] {
@@ -162,7 +166,8 @@ function assignByCompatibilityConstruction(
   groups: WorkingGroup[],
   capacities: number[],
   globalAvgSkill: SkillVector,
-  weights: AxisWeights
+  weights: AxisWeights,
+  useEvaluation: boolean
 ): void {
   const seeds = farthestPointSeeds(members, groups.length);
   const seedGmails = new Set(seeds.map((s) => s.gmail));
@@ -173,7 +178,7 @@ function assignByCompatibilityConstruction(
   });
 
   // เรียงตามคะแนนประเมินย้อนหลังเหมือนพฤติกรรมเดิม เพื่อกระจายคนคะแนนสูง/ต่ำคนละกลุ่มกัน
-  const remaining = stableSortDesc(members.filter((m) => !seedGmails.has(m.gmail)), (m) => m.evalScore);
+  const remaining = stableSortDesc(members.filter((m) => !seedGmails.has(m.gmail)), (m) => useEvaluation ? m.evalScore : 0);
 
   for (const m of remaining) {
     let bestIdx = -1;
@@ -182,7 +187,7 @@ function assignByCompatibilityConstruction(
       if (g.members.length >= capacities[i]) return;
       const codesAfter = [...g.members.map((mm) => mm.code), m.code];
       const skillVectorsAfter = [...g.members.map((mm) => mm.skillVector), m.skillVector];
-      const score = combinedGroupScore(codesAfter, skillVectorsAfter, globalAvgSkill, weights);
+      const score = combinedGroupScore(codesAfter, skillVectorsAfter, globalAvgSkill, weights, useEvaluation);
       if (score > bestScore) { bestScore = score; bestIdx = i; }
     });
     if (bestIdx === -1) {
@@ -213,7 +218,7 @@ function rowSum(code: string, others: string[], weights: AxisWeights): number {
  * turning the group-pair sweep from O(n^4) into O(n^3) while producing the exact same deltas (up to
  * floating-point rounding) as the brute-force version above.
  */
-function localSearchImprove(groups: WorkingGroup[], globalAvgSkill: SkillVector, weights: AxisWeights): void {
+function localSearchImprove(groups: WorkingGroup[], globalAvgSkill: SkillVector, weights: AxisWeights, useEvaluation: boolean): void {
   const maxRounds = 50;
   const dims = globalAvgSkill.length;
 
@@ -235,8 +240,8 @@ function localSearchImprove(groups: WorkingGroup[], globalAvgSkill: SkillVector,
         const pairCountB = (nB * (nB - 1)) / 2;
         const avgSkillA = averageSkillVector(skillsA);
         const avgSkillB = averageSkillVector(skillsB);
-        const skillBalanceBaseA = skillBalanceFromAvg(avgSkillA, globalAvgSkill);
-        const skillBalanceBaseB = skillBalanceFromAvg(avgSkillB, globalAvgSkill);
+        const skillBalanceBaseA = useEvaluation ? skillBalanceFromAvg(avgSkillA, globalAvgSkill) : 0;
+        const skillBalanceBaseB = useEvaluation ? skillBalanceFromAvg(avgSkillB, globalAvgSkill) : 0;
 
         // Precomputed once per (ai) / (bi) — reused across every candidate on the other side, since it
         // only depends on the member being replaced, not on what it's being replaced with.
@@ -268,7 +273,7 @@ function localSearchImprove(groups: WorkingGroup[], globalAvgSkill: SkillVector,
 
             let skillDeltaA = 0;
             let skillDeltaB = 0;
-            if (nA > 0 && nB > 0) {
+            if (useEvaluation && nA > 0 && nB > 0) {
               const newAvgA: number[] = new Array(dims);
               const newAvgB: number[] = new Array(dims);
               for (let d = 0; d < dims; d++) {
@@ -335,7 +340,7 @@ function buildSynergyNotes(members: MatchInputMember[], template: string): Syner
 }
 
 export function computeGroups(input: ComputeGroupsInput): MatchedGroupResult[] {
-  const { members, template } = input;
+  const { members, template, useEvaluation = true } = input;
   const groupSize = Math.max(1, input.groupSize || 1);
   const numGroups = Math.max(1, Math.ceil(members.length / groupSize));
 
@@ -345,8 +350,8 @@ export function computeGroups(input: ComputeGroupsInput): MatchedGroupResult[] {
   const capacities = balancedCapacities(members.length, numGroups);
   const weights = resolveAxisWeights(template);
 
-  assignByCompatibilityConstruction(members, groups, capacities, globalAvgSkill, weights);
-  localSearchImprove(groups, globalAvgSkill, weights);
+  assignByCompatibilityConstruction(members, groups, capacities, globalAvgSkill, weights, useEvaluation);
+  localSearchImprove(groups, globalAvgSkill, weights, useEvaluation);
 
   return groups.map((g, i) => ({
     id: g.id,
@@ -367,12 +372,19 @@ export function computeGroups(input: ComputeGroupsInput): MatchedGroupResult[] {
  * เดียวกัน แต่เปลี่ยนลำดับตั้งต้นอย่าง deterministic เพื่อให้ได้การกระจายสมาชิกต่างกัน
  * ไม่รับผลกลุ่มจาก client จึงยังคงคำนวณจากข้อมูลใน DB ฝั่ง server เท่านั้น
  */
-export function buildMatchPlans(input: ComputeGroupsInput, preferredTypes: string[] = []): MatchPlan[] {
+export function buildMatchPlans(
+  input: ComputeGroupsInput,
+  preferredTypes: string[] = [],
+  customTypes: string[] = []
+): MatchPlan[] {
   const preferred = new Set(preferredTypes.map((code) => code.toUpperCase()));
+  const custom = new Set(customTypes.map((code) => code.toUpperCase()));
   const base = [...input.members].sort((a, b) => {
     const aPreferred = preferred.has(a.code.toUpperCase()) ? 0 : 1;
     const bPreferred = preferred.has(b.code.toUpperCase()) ? 0 : 1;
-    return aPreferred - bPreferred || a.gmail.localeCompare(b.gmail);
+    const aCustom = custom.has(a.code.toUpperCase()) ? 0 : 1;
+    const bCustom = custom.has(b.code.toUpperCase()) ? 0 : 1;
+    return aCustom - bCustom || aPreferred - bPreferred || a.gmail.localeCompare(b.gmail);
   });
   const variants = [
     base,
@@ -390,10 +402,15 @@ export function buildMatchPlans(input: ComputeGroupsInput, preferredTypes: strin
       (count, group) => count + group.synergyNotes.filter((note) => !note.avoid).length,
       0
     );
+    const scores = groups.flatMap((group) => group.synergyNotes.filter((note) => !note.avoid).map((note) => note.score));
+    const compatibilityPercent = scores.length
+      ? Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length)
+      : 0;
+    const evaluationUsed = input.useEvaluation !== false;
     const explanation = avoidPairs > 0
-      ? `แผนนี้มีคู่ที่ควรระวังอยู่ ${avoidPairs} คู่ ระบบจะแสดงเหตุผลให้ตรวจสอบก่อนยืนยัน`
-      : `แผนนี้มีคู่ที่เสริมกันเด่น ${strongPairs} คู่ และไม่พบคู่ที่ต่ำกว่าเกณฑ์ในกลุ่ม`;
-    return { index: index + 1, groups, explanation };
+      ? `มีคู่ที่ควรระวัง ${avoidPairs} คู่ — คะแนนความเข้ากันเฉลี่ย ${compatibilityPercent}%`
+      : `มีคู่ที่เสริมกันเด่น ${strongPairs} คู่ — คะแนนความเข้ากันเฉลี่ย ${compatibilityPercent}%`;
+    return { index: index + 1, groups, explanation, compatibilityPercent, evaluationUsed };
   });
 }
 
@@ -416,6 +433,8 @@ export interface RoomInsights {
   recommendedTypes: RoomTypeRecommendation[];
   /** จำนวนสมาชิกที่มีประวัติเคยถูกประเมินจริง (evalCount > 0) เทียบกับสมาชิกทั้งหมด — ให้ host เห็นว่าคะแนน skill balance ที่ใช้จับกลุ่มมีข้อมูลรองรับมากแค่ไหน */
   skillDataCoverage: { membersWithHistory: number; totalMembers: number };
+  evaluationUsed: boolean;
+  scoringExplanation: string;
 }
 
 const ROOM_BEST_PAIR_COUNT = 5;
@@ -426,7 +445,7 @@ const ROOM_RECOMMENDED_TYPE_COUNT = 5;
  * all-pairs ตรงๆ ได้สบายๆ (ห้องใหญ่สุด 300 คน ≈ 45,000 คู่) ต่างจาก 2-opt local search ใน localSearchImprove
  * ที่ต้อง optimize ให้เหลือ O(n^2) ต่อรอบเพราะถูกเรียกซ้ำนับสิบล้านครั้ง
  */
-export function buildRoomInsights(members: MatchInputMember[], template: string): RoomInsights {
+export function buildRoomInsights(members: MatchInputMember[], template: string, useEvaluation = true): RoomInsights {
   const weights = resolveAxisWeights(template);
 
   const allPairs: { i: number; j: number; result: ReturnType<typeof pairCompatibility> }[] = [];
@@ -468,5 +487,14 @@ export function buildRoomInsights(members: MatchInputMember[], template: string)
     totalMembers: members.length,
   };
 
-  return { bestPairs, cautionPairs, recommendedTypes, skillDataCoverage };
+  return {
+    bestPairs,
+    cautionPairs,
+    recommendedTypes,
+    skillDataCoverage,
+    evaluationUsed: useEvaluation,
+    scoringExplanation: useEvaluation
+      ? 'ใช้ MBTI 70% เป็นหลัก และใช้คะแนนประเมินเพื่อนร่วมทีม 30% เพื่อกระจายทักษะให้แต่ละทีมสมดุลกับค่าเฉลี่ยของห้อง'
+      : 'ใช้ MBTI 100% ในการคำนวณ และไม่ใช้คะแนนประเมินเพื่อนร่วมทีม',
+  };
 }

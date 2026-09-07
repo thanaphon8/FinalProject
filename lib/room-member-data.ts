@@ -81,7 +81,7 @@ export interface EvalScoreData {
   overall: number;
   leadership: number;
   count: number;
-  /** ค่าเฉลี่ยรายเกณฑ์ทั้ง 11 ด้าน (0-100, ถ่วงเข้าหาคะแนนกลางแบบเดียวกับ overall/leadership) —
+  /** ค่าเฉลี่ยรายเกณฑ์ทั้ง 5 ด้าน (0-100, ถ่วงเข้าหาคะแนนกลางแบบเดียวกับ overall/leadership) —
    * ใช้ตอนจับกลุ่มเพื่อกระจายทักษะเฉพาะด้าน (เช่น cooperation/teamwork) แม่นกว่าดูแค่ค่าเฉลี่ยรวม */
   criteria: Record<CriteriaKey, number>;
 }
@@ -126,11 +126,15 @@ export async function fetchMemberEvalScores(
     if (!resolvedGmail) continue;
     const rawList = byGmail.get(resolvedGmail);
     if (!rawList || rawList.length === 0) continue;
-    const list = trimOutliers(rawList);
+    // รองรับแบบประเมินรุ่นเก่าที่ไม่มีเกณฑ์ใหม่ โดยถือคะแนนที่หายเป็นค่ากลาง 3/5
+    const normalizedList = rawList.map((s) =>
+      ({ ...Object.fromEntries(CRITERIA_KEYS.map((k) => [k, s[k] ?? 3])), createdAt: s.createdAt } as ScoredEval)
+    );
+    const list = trimOutliers(normalizedList);
 
     // แบบประเมินยิ่งเก่ายิ่งมีน้ำหนักลดลง (exponential decay, half-life 90 วัน) — ผลงานล่าสุดสำคัญกว่าผลงานเก่า
     const avg = (key: CriteriaKey) =>
-      weightedAverage(list.map((s) => ({ value: s[key], weight: recencyWeight(s.createdAt, now) })));
+      weightedAverage(list.map((s) => ({ value: s[key] ?? 3, weight: recencyWeight(s.createdAt, now) })));
     // ถ่วงเข้าหาคะแนนกลางๆ ตามจำนวนผู้ประเมินจริง (rawList.length ไม่ใช่ list.length หลัง trim) —
     // ความเชื่อมั่นในค่าเฉลี่ยขึ้นกับจำนวนคนที่ประเมินทั้งหมด ไม่ใช่จำนวนที่เหลือหลังตัด outlier
     const overallAvg = shrinkTowardNeutral(
@@ -138,7 +142,7 @@ export async function fetchMemberEvalScores(
       rawList.length
     );
     const leadershipAvg = shrinkTowardNeutral(
-      (avg('initiative') + avg('problemSolving') + avg('responsibility')) / 3,
+      (avg('problemSolving') + avg('responsibility') + avg('teamwork')) / 3,
       rawList.length
     );
     const criteria = Object.fromEntries(

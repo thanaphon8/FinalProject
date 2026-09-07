@@ -55,6 +55,8 @@ const RoomInsightsSchema = new Schema({
     type: [{ code: String, avgScore: Number, presentCount: Number, _id: false }],
     default: [],
   },
+  evaluationUsed: { type: Boolean, default: true },
+  scoringExplanation: { type: String, default: '' },
 }, { _id: false });
 
 // คำร้องที่สมาชิกในกลุ่มแจ้งว่าเพื่อนออกจากกลุ่มไปแล้ว (หลัง match) — host เป็นคนตัดสินใจเอาออกจริงหรือยกเลิกคำร้อง
@@ -109,12 +111,6 @@ const PeerEvaluationSchema = new Schema({
     responsibility:  { type: Number, required: true, min: 1, max: 5 },
     communication:   { type: Number, required: true, min: 1, max: 5 },
     problemSolving:  { type: Number, required: true, min: 1, max: 5 },
-    cooperation:     { type: Number, required: true, min: 1, max: 5 },
-    creativity:      { type: Number, required: true, min: 1, max: 5 },
-    initiative:      { type: Number, required: true, min: 1, max: 5 },
-    timeManagement:  { type: Number, required: true, min: 1, max: 5 },
-    adaptability:    { type: Number, required: true, min: 1, max: 5 },
-    qualityOfWork:   { type: Number, required: true, min: 1, max: 5 },
     teamwork:        { type: Number, required: true, min: 1, max: 5 },
   },
   comment: { type: String, default: '', trim: true, maxlength: 1000 },

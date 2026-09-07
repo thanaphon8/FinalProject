@@ -17,12 +17,6 @@ const CRITERIA_LABELS: Record<CriteriaKey, string> = {
   responsibility: 'ความรับผิดชอบ',
   communication: 'การสื่อสาร',
   problemSolving: 'การแก้ไขปัญหา',
-  cooperation: 'ความร่วมมือ',
-  creativity: 'ความคิดสร้างสรรค์',
-  initiative: 'ความคิดริเริ่ม',
-  timeManagement: 'การบริหารเวลา',
-  adaptability: 'ความยืดหยุ่น',
-  qualityOfWork: 'คุณภาพงาน',
   teamwork: 'การทำงานเป็นทีม',
 };
 

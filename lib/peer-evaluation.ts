@@ -1,7 +1,5 @@
 export const CRITERIA_KEYS = [
-  'contribution', 'responsibility', 'communication', 'problemSolving', 'cooperation',
-  'creativity', 'initiative', 'timeManagement', 'adaptability', 'qualityOfWork',
-  'teamwork',
+  'contribution', 'responsibility', 'communication', 'problemSolving', 'teamwork',
 ] as const;
 export type CriteriaKey = typeof CRITERIA_KEYS[number];
 

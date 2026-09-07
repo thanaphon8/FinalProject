@@ -40,6 +40,8 @@ export interface RoomInsights {
   cautionPairs: SynergyNote[];
   recommendedTypes: RoomTypeRecommendation[];
   skillDataCoverage: { membersWithHistory: number; totalMembers: number };
+  evaluationUsed?: boolean;
+  scoringExplanation?: string;
 }
 interface MemberLite { gmail: string; name: string; }
 
@@ -103,6 +105,8 @@ export default function RoomCompatibilityInsights({
     cautionPairs: roomInsights?.cautionPairs ?? [],
     recommendedTypes: roomInsights?.recommendedTypes ?? [],
     skillDataCoverage: roomInsights?.skillDataCoverage ?? { membersWithHistory: 0, totalMembers: 0 },
+    evaluationUsed: roomInsights?.evaluationUsed ?? true,
+    scoringExplanation: roomInsights?.scoringExplanation ?? 'ใช้ MBTI 70% และคะแนนประเมิน 30% ในการคำนวณ',
   };
 
   const nameOf = (gmail: string) => members.find((m) => m.gmail === gmail)?.name ?? gmail;
@@ -166,6 +170,10 @@ export default function RoomCompatibilityInsights({
             </div>
 
             <div className="p-5 sm:p-6 flex flex-col gap-6 overflow-y-auto bg-[#FAFAFC]">
+              <div className="bg-white border border-[#EDE9FF] rounded-2xl p-3.5 shadow-sm">
+                <p className="text-xs font-black text-[#4B3E7A]">วิธีคำนวณแผนนี้</p>
+                <p className="text-xs text-gray-500 leading-relaxed mt-1">{insights.scoringExplanation}</p>
+              </div>
               {insights.skillDataCoverage.totalMembers > 0 && (
                 <div>
                   <SectionHeader icon={<Scale size={14} />} iconBg="#EDE9FF" iconColor="#4B3E7A" title="คะแนนประเมินที่ใช้จับกลุ่มด้วย (30%)" />

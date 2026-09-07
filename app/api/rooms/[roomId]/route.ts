@@ -185,15 +185,22 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ ro
       const preferredTypes = Array.isArray(body.preferredTypes)
         ? body.preferredTypes.filter((code: unknown): code is string => typeof code === 'string').slice(0, 16)
         : [];
+      const customTypes = Array.isArray(body.customTypes)
+        ? body.customTypes.filter((code: unknown): code is string => typeof code === 'string').slice(0, 16)
+        : [];
+      const useEvaluation = body.useEvaluation !== false;
       const plans = buildMatchPlans({
         members: matchInput,
         groupSize: roomObj.groupSize ?? 4,
         template,
-      }, preferredTypes);
+        useEvaluation,
+      }, preferredTypes, customTypes);
       return NextResponse.json({
         plans: plans.map((plan) => ({
           index: plan.index,
           explanation: plan.explanation,
+          compatibilityPercent: plan.compatibilityPercent,
+          evaluationUsed: plan.evaluationUsed,
           groups: plan.groups.map((group) => ({
             id: group.id,
             name: group.name,
@@ -242,16 +249,21 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ ro
       const preferredTypes = Array.isArray(body.preferredTypes)
         ? body.preferredTypes.filter((code: unknown): code is string => typeof code === 'string').slice(0, 16)
         : [];
+      const customTypes = Array.isArray(body.customTypes)
+        ? body.customTypes.filter((code: unknown): code is string => typeof code === 'string').slice(0, 16)
+        : [];
+      const useEvaluation = body.useEvaluation !== false;
       const plans = buildMatchPlans({
         members: matchInput,
         groupSize: roomObj.groupSize ?? 4,
         template,
-      }, preferredTypes);
+        useEvaluation,
+      }, preferredTypes, customTypes);
       const requestedPlan = Number.isInteger(body.planIndex) ? Number(body.planIndex) : 1;
       const selectedPlan = plans.find((plan) => plan.index === requestedPlan) ?? plans[0];
       const matchedGroups = selectedPlan.groups;
       // ภาพรวมทั้งห้อง (ข้ามกลุ่ม) — คนละ scope กับ synergyNotes ต่อกลุ่มใน matchedGroups ด้านบน
-      const roomInsights = buildRoomInsights(matchInput, template);
+      const roomInsights = buildRoomInsights(matchInput, template, useEvaluation);
 
       // Atomic: อัปเดตได้ก็ต่อเมื่อ matchDone ยังไม่ true ตอนที่เขียนจริง (ไม่ใช่แค่ตอนอ่านตอนต้นฟังก์ชัน)
       // กัน double-click/double-mount สองคำขอชนกันแล้วเขียนทับผลจับกลุ่มที่มีอยู่แล้ว

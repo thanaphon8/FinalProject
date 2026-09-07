@@ -41,6 +41,8 @@ interface SettingsForm {
 interface PreviewPlan {
   index: number;
   explanation: string;
+  compatibilityPercent: number;
+  evaluationUsed: boolean;
   groups: { id: number; name: string; members: { name: string; gmail: string; role: string }[]; synergyNotes: { gmailA: string; gmailB: string; reasons: string[]; avoid: boolean }[] }[];
 }
 
@@ -82,6 +84,9 @@ const ManualPage = () => {
   const [showPreview, setShowPreview] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState(1);
   const [preferredTypes, setPreferredTypes] = useState<string[]>([]);
+  const [customTypes, setCustomTypes] = useState<string[]>([]);
+  const [customMode, setCustomMode] = useState(false);
+  const [useEvaluation, setUseEvaluation] = useState(true);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState('');
   const lastMemberCountRef = useRef(-1);
@@ -231,7 +236,12 @@ const ManualPage = () => {
       const res = await fetch(`/api/rooms/${getRoomId(room)}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'previewMatch', preferredTypes }),
+        body: JSON.stringify({
+          action: 'previewMatch',
+          preferredTypes: customMode ? [] : preferredTypes,
+          customTypes: customMode ? customTypes : [],
+          useEvaluation,
+        }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -255,7 +265,13 @@ const ManualPage = () => {
       const res = await fetch(`/api/rooms/${getRoomId(room)}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'match', planIndex: selectedPlan, preferredTypes }),
+        body: JSON.stringify({
+          action: 'match',
+          planIndex: selectedPlan,
+          preferredTypes: customMode ? [] : preferredTypes,
+          customTypes: customMode ? customTypes : [],
+          useEvaluation,
+        }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -535,21 +551,67 @@ const ManualPage = () => {
             </div>
 
             <div className="mb-5">
-              <p className="text-sm font-black text-gray-700 mb-2">type ที่ Host อยากให้มีในทีม (เลือกได้หลาย type)</p>
+              <div className="flex items-center justify-between gap-3 mb-2">
+                <p className="text-sm font-black text-gray-700">type ที่ Host อยากให้มีในทีม</p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCustomMode((value) => !value);
+                    setPreviewPlans([]);
+                    setPreviewError('');
+                  }}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-black border transition-all ${customMode ? 'bg-[#4B3E7A] text-white border-[#4B3E7A]' : 'bg-white text-[#4B3E7A] border-[#4B3E7A]'}`}
+                >
+                  {customMode ? 'กำหนดเอง: เปิด' : 'กำหนดเอง'}
+                </button>
+              </div>
+              <p className="text-[11px] text-gray-500 mb-2">
+                {customMode ? 'เลือก type ที่ต้องการเอง ระบบจะพยายามกระจาย type เหล่านี้ในทุกแผน' : 'เลือก type ที่อยากให้ระบบใช้เป็นแนวทาง'}
+              </p>
               <div className="flex flex-wrap gap-2">
                 {MBTI_CODES.map((code) => {
-                  const checked = preferredTypes.includes(code);
+                  const selectedTypes = customMode ? customTypes : preferredTypes;
+                  const checked = selectedTypes.includes(code);
                   const present = Object.values(memberTypes).some((type) => type.code === code);
                   return (
-                    <button key={code} type="button" onClick={() => setPreferredTypes((prev) => checked ? prev.filter((value) => value !== code) : [...prev, code])}
+                    <button key={code} type="button" onClick={() => {
+                      const update = (prev: string[]) => checked ? prev.filter((value) => value !== code) : [...prev, code];
+                      if (customMode) setCustomTypes(update);
+                      else setPreferredTypes(update);
+                      setPreviewPlans([]);
+                    }}
                       className={`px-3 py-1.5 rounded-xl text-xs font-black border transition-all ${checked ? 'bg-[#4B3E7A] text-white border-[#4B3E7A]' : 'bg-white text-gray-500 border-gray-200 hover:border-[#4B3E7A]'} ${!present ? 'opacity-50' : ''}`}>
                       {code}{present ? '' : ' · ไม่มีในห้อง'}
                     </button>
                   );
                 })}
               </div>
-              <p className="text-[11px] text-gray-400 mt-2">ระบบจะพยายามกระจาย type ที่เลือกให้เกิดความหลากหลายเท่าที่สมาชิกจริงในห้องรองรับ</p>
+              <p className="text-[11px] text-gray-400 mt-2">คะแนนความเข้ากันคำนวณจากความต่างของแกน MBTI และแสดงเป็นเปอร์เซ็นต์ เพื่อช่วยตัดสินใจ ไม่ใช่การรับรองว่าทำงานร่วมกันได้แน่นอน</p>
             </div>
+
+            <label className="flex items-start gap-3 rounded-2xl border border-[#EDE9FF] bg-[#FAF9FF] p-3.5 mb-5 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={useEvaluation}
+                onChange={(event) => { setUseEvaluation(event.target.checked); setPreviewPlans([]); }}
+                className="mt-0.5 h-4 w-4 accent-[#4B3E7A]"
+              />
+              <span>
+                <span className="block text-sm font-black text-[#4B3E7A]">ใช้คะแนนประเมินเพื่อนร่วมทีมในการคำนวณ</span>
+                <span className="block text-[11px] text-gray-500 mt-1">เมื่อเปิด ระบบใช้คะแนน 30% เพื่อกระจายทักษะให้แต่ละทีมใกล้ค่าเฉลี่ยของห้อง และใช้ MBTI 70% เป็นหลัก หากปิดจะใช้ MBTI 100%</span>
+              </span>
+            </label>
+
+            {previewPlans.length === 0 && (
+              <button
+                type="button"
+                onClick={openMatchPreview}
+                disabled={previewLoading}
+                className="w-full mb-4 py-3 rounded-2xl border-2 border-[#4B3E7A] text-[#4B3E7A] font-black hover:bg-[#F7F5FF] disabled:opacity-50"
+              >
+                {previewLoading ? 'กำลังคำนวณ...' : 'วิเคราะห์แผนตามตัวเลือกนี้'}
+              </button>
+            )}
 
             <div className="grid gap-3 md:grid-cols-3">
               {previewPlans.map((plan) => (
@@ -559,7 +621,15 @@ const ManualPage = () => {
                     <span className="font-black text-[#4B3E7A]">แผนที่ {plan.index}</span>
                     {selectedPlan === plan.index && <CheckCircle2 size={18} className="text-[#4B3E7A]" />}
                   </div>
-                  <p className="text-[11px] text-gray-500 leading-relaxed mb-3">{plan.explanation}</p>
+                  <p className="text-[11px] text-gray-500 leading-relaxed mb-2">{plan.explanation}</p>
+                  <div className="rounded-xl bg-white border border-gray-100 p-2 mb-2">
+                    <p className="text-sm font-black text-[#4B3E7A]">ความเข้ากันเฉลี่ย {plan.compatibilityPercent}%</p>
+                    <p className="text-[10px] text-gray-400 mt-0.5">
+                      {plan.evaluationUsed
+                        ? 'MBTI 70% + คะแนนประเมิน 30%: กระจายทักษะให้สมดุลกับค่าเฉลี่ยทั้งห้อง'
+                        : 'MBTI 100%: ไม่ใช้คะแนนประเมินในการเลือกกลุ่ม'}
+                    </p>
+                  </div>
                   {plan.groups.map((group) => {
                     const cautionCount = group.synergyNotes.filter((note) => note.avoid).length;
                     return <div key={group.id} className="border-t border-gray-100 py-2">
@@ -575,7 +645,7 @@ const ManualPage = () => {
             </div>
             {previewPlans.length === 0 && !previewLoading && <p className="text-sm text-gray-500 text-center py-6">ยังไม่มีแผนแนะนำ</p>}
             {previewError && <p className="text-red-500 text-sm font-bold mt-4">⚠️ {previewError}</p>}
-            <button onClick={confirmMatch} disabled={previewLoading} className="w-full mt-5 py-3 rounded-2xl bg-[#4B3E7A] text-white font-black hover:opacity-90 disabled:opacity-50">
+            <button onClick={confirmMatch} disabled={previewLoading || previewPlans.length === 0} className="w-full mt-5 py-3 rounded-2xl bg-[#4B3E7A] text-white font-black hover:opacity-90 disabled:opacity-50">
               {previewLoading ? 'กำลังคำนวณ...' : `ยืนยันใช้แผนที่ ${selectedPlan}`}
             </button>
           </div>

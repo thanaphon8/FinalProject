@@ -11,12 +11,6 @@ const CRITERIA = [
   { id: 'responsibility', label: 'ความรับผิดชอบและตรงต่อเวลา' },
   { id: 'communication',  label: 'การสื่อสารและรับฟังความคิดเห็น' },
   { id: 'problemSolving', label: 'การแก้ไขปัญหาเมื่อเกิดอุปสรรค' },
-  { id: 'cooperation',    label: 'ความร่วมมือและช่วยเหลือเพื่อนในทีม' },
-  { id: 'creativity',     label: 'ความคิดสร้างสรรค์ในการทำงาน' },
-  { id: 'initiative',     label: 'ความคิดริเริ่มและความเป็นผู้นำ' },
-  { id: 'timeManagement', label: 'การบริหารจัดการเวลาและวางแผนงาน' },
-  { id: 'adaptability',   label: 'ความยืดหยุ่นและปรับตัวเมื่อสถานการณ์เปลี่ยน' },
-  { id: 'qualityOfWork',  label: 'คุณภาพของผลงานที่ทำออกมา' },
   { id: 'teamwork',       label: 'คะแนนการทำงานร่วมกันเป็นทีมโดยรวม' },
 ] as const;
 
