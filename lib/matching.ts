@@ -27,6 +27,12 @@ export interface ComputeGroupsInput {
   template: string;
 }
 
+export interface MatchPlan {
+  index: number;
+  groups: MatchedGroupResult[];
+  explanation: string;
+}
+
 /** คู่สมาชิกที่มีสัญญาณเด่นในกลุ่ม — เข้ากันดีที่สุด หรือควรหลีกเลี่ยง (ถูกจับกลุ่มร่วมกันทั้งที่ควรเลี่ยง เพราะข้อจำกัดขนาดกลุ่ม) */
 export interface SynergyNote {
   gmailA: string;
@@ -354,6 +360,41 @@ export function computeGroups(input: ComputeGroupsInput): MatchedGroupResult[] {
     })),
     synergyNotes: buildSynergyNotes(g.members, template),
   }));
+}
+
+/**
+ * สร้างแผนที่เป็นตัวเลือกให้ host เปรียบเทียบได้ โดยทุกแผนยังใช้ objective
+ * เดียวกัน แต่เปลี่ยนลำดับตั้งต้นอย่าง deterministic เพื่อให้ได้การกระจายสมาชิกต่างกัน
+ * ไม่รับผลกลุ่มจาก client จึงยังคงคำนวณจากข้อมูลใน DB ฝั่ง server เท่านั้น
+ */
+export function buildMatchPlans(input: ComputeGroupsInput, preferredTypes: string[] = []): MatchPlan[] {
+  const preferred = new Set(preferredTypes.map((code) => code.toUpperCase()));
+  const base = [...input.members].sort((a, b) => {
+    const aPreferred = preferred.has(a.code.toUpperCase()) ? 0 : 1;
+    const bPreferred = preferred.has(b.code.toUpperCase()) ? 0 : 1;
+    return aPreferred - bPreferred || a.gmail.localeCompare(b.gmail);
+  });
+  const variants = [
+    base,
+    [...base].sort((a, b) => a.code.localeCompare(b.code) || b.evalScore - a.evalScore),
+    [...base].sort((a, b) => b.evalScore - a.evalScore || a.code.localeCompare(b.code)),
+  ];
+
+  return variants.map((members, index) => {
+    const groups = computeGroups({ ...input, members });
+    const avoidPairs = groups.reduce(
+      (count, group) => count + group.synergyNotes.filter((note) => note.avoid).length,
+      0
+    );
+    const strongPairs = groups.reduce(
+      (count, group) => count + group.synergyNotes.filter((note) => !note.avoid).length,
+      0
+    );
+    const explanation = avoidPairs > 0
+      ? `แผนนี้มีคู่ที่ควรระวังอยู่ ${avoidPairs} คู่ ระบบจะแสดงเหตุผลให้ตรวจสอบก่อนยืนยัน`
+      : `แผนนี้มีคู่ที่เสริมกันเด่น ${strongPairs} คู่ และไม่พบคู่ที่ต่ำกว่าเกณฑ์ในกลุ่ม`;
+    return { index: index + 1, groups, explanation };
+  });
 }
 
 /** อันดับความเข้ากันเฉลี่ยของ MBTI type หนึ่งที่ "มีคนถืออยู่จริงในห้อง" กับ type อื่นที่มีคนถืออยู่จริงในห้องเดียวกัน —

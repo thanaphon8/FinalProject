@@ -2,12 +2,13 @@
 
 import { useRouter } from 'next/navigation';
 import { useState, useEffect, useRef } from 'react';
-import { Copy, Settings, BookOpen, X, Home } from 'lucide-react';
+import { Copy, Settings, BookOpen, X, Home, Sparkles, CheckCircle2 } from 'lucide-react';
 import Navbar from '../../navbar/page';
 import { resolveAvatar } from '@/lib/avatar';
 import { typeColor } from '@/lib/mbti';
 import DeadlinePicker from '../../components/DeadlinePicker';
 import MatchingMethodInfo from '../../components/MatchingMethodInfo';
+import { MBTI_CODES } from '@/lib/mbti';
 
 interface RoomMember { name: string; avatarSeed: number; avatarImage?: string | null; gmail: string; role?: string; }
 interface CurrentRoom {
@@ -35,6 +36,12 @@ interface SettingsForm {
   totalMembers: string;
   groupSize: string;
   deadline: string;
+}
+
+interface PreviewPlan {
+  index: number;
+  explanation: string;
+  groups: { id: number; name: string; members: { name: string; gmail: string; role: string }[]; synergyNotes: { gmailA: string; gmailB: string; reasons: string[]; avoid: boolean }[] }[];
 }
 
 // ✅ ธีมสีตาม template ของห้อง (สีอ้างอิงจากหน้า templates / app/create/match)
@@ -71,6 +78,12 @@ const ManualPage = () => {
   const [settingsLoading, setSettingsLoading] = useState(false);
 
   const [memberTypes, setMemberTypes] = useState<Record<string, { code: string; title: string; icon: string }>>({});
+  const [previewPlans, setPreviewPlans] = useState<PreviewPlan[]>([]);
+  const [showPreview, setShowPreview] = useState(false);
+  const [selectedPlan, setSelectedPlan] = useState(1);
+  const [preferredTypes, setPreferredTypes] = useState<string[]>([]);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState('');
   const lastMemberCountRef = useRef(-1);
 
   const getRoomId = (r: CurrentRoom) => r.roomId ?? r.id;
@@ -209,6 +222,55 @@ const ManualPage = () => {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const openMatchPreview = async () => {
+    if (!room || previewLoading) return;
+    setShowPreview(true);
+    setPreviewLoading(true);
+    setPreviewError('');
+    try {
+      const res = await fetch(`/api/rooms/${getRoomId(room)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'previewMatch', preferredTypes }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setPreviewError(data.error ?? 'สร้างแผนแนะนำไม่สำเร็จ');
+        return;
+      }
+      setPreviewPlans(data.plans ?? []);
+      setSelectedPlan(1);
+    } catch {
+      setPreviewError('เชื่อมต่อเซิร์ฟเวอร์ไม่สำเร็จ กรุณาลองใหม่');
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  const confirmMatch = async () => {
+    if (!room || previewLoading) return;
+    setPreviewLoading(true);
+    setPreviewError('');
+    try {
+      const res = await fetch(`/api/rooms/${getRoomId(room)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'match', planIndex: selectedPlan, preferredTypes }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setPreviewError(data.error ?? 'บันทึกผลการจับกลุ่มไม่สำเร็จ');
+        return;
+      }
+      localStorage.setItem('currentRoom', JSON.stringify({ ...room, ...data.room, id: getRoomId(room) }));
+      router.push('/create/group');
+    } catch {
+      setPreviewError('เชื่อมต่อเซิร์ฟเวอร์ไม่สำเร็จ กรุณาลองใหม่');
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
   return (
     <>
       <style>{`
@@ -330,7 +392,7 @@ const ManualPage = () => {
             {/* Mobile-only: compact match button */}
             {isAllReady && (
               <button
-                onClick={() => router.push('/create/matching')}
+                onClick={() => user?.name === room?.hostName ? openMatchPreview() : router.push('/create/matching')}
                 className="lg:hidden bg-[#FF8A00] text-white px-4 py-2 rounded-full font-black text-sm uppercase shadow-[0_4px_0_0_#D97706] hover:shadow-[0_2px_0_0_#D97706] hover:translate-y-[2px] active:shadow-none active:translate-y-[4px] transition-all"
               >
                 MATCH!
@@ -448,7 +510,7 @@ const ManualPage = () => {
                 </div>
               ) : (
                 <button
-                  onClick={() => router.push('/create/matching')}
+                  onClick={() => user?.name === room?.hostName ? openMatchPreview() : router.push('/create/matching')}
                   className="w-full relative group transition-transform active:scale-95">
                   <div className="absolute inset-0 bg-[#D97706] rounded-[20px] translate-y-2 group-active:translate-y-1"></div>
                   <div className="relative bg-[#FF8A00] hover:bg-[#FF9D2E] text-white py-6 sm:py-8 md:py-10 rounded-[20px] flex items-center justify-center transition-all border-b-4 border-white/20">
@@ -460,6 +522,65 @@ const ManualPage = () => {
           </div>
         </div>
       </div>
+
+      {showPreview && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => !previewLoading && setShowPreview(false)}>
+          <div className="bg-white rounded-[24px] w-full max-w-3xl max-h-[90vh] overflow-y-auto p-5 sm:p-7 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-start justify-between gap-4 mb-4">
+              <div>
+                <p className="text-xl font-black text-[#4B3E7A] flex items-center gap-2"><Sparkles size={20} /> เลือกแผนจับกลุ่ม</p>
+                <p className="text-xs text-gray-500 mt-1">Manual: เลือก type ที่ต้องการเป็นแนวทาง แล้วเลือกแผนที่เหมาะที่สุด ระบบจะคำนวณและตรวจข้อมูลจริงอีกครั้งบน server</p>
+              </div>
+              <button onClick={() => setShowPreview(false)} className="w-8 h-8 rounded-full bg-gray-100 text-gray-500 flex items-center justify-center"><X size={16} /></button>
+            </div>
+
+            <div className="mb-5">
+              <p className="text-sm font-black text-gray-700 mb-2">type ที่ Host อยากให้มีในทีม (เลือกได้หลาย type)</p>
+              <div className="flex flex-wrap gap-2">
+                {MBTI_CODES.map((code) => {
+                  const checked = preferredTypes.includes(code);
+                  const present = Object.values(memberTypes).some((type) => type.code === code);
+                  return (
+                    <button key={code} type="button" onClick={() => setPreferredTypes((prev) => checked ? prev.filter((value) => value !== code) : [...prev, code])}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-black border transition-all ${checked ? 'bg-[#4B3E7A] text-white border-[#4B3E7A]' : 'bg-white text-gray-500 border-gray-200 hover:border-[#4B3E7A]'} ${!present ? 'opacity-50' : ''}`}>
+                      {code}{present ? '' : ' · ไม่มีในห้อง'}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-[11px] text-gray-400 mt-2">ระบบจะพยายามกระจาย type ที่เลือกให้เกิดความหลากหลายเท่าที่สมาชิกจริงในห้องรองรับ</p>
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-3">
+              {previewPlans.map((plan) => (
+                <button key={plan.index} type="button" onClick={() => setSelectedPlan(plan.index)}
+                  className={`text-left rounded-2xl border-2 p-3 transition-all ${selectedPlan === plan.index ? 'border-[#4B3E7A] bg-[#F7F5FF]' : 'border-gray-100 bg-white hover:border-gray-300'}`}>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="font-black text-[#4B3E7A]">แผนที่ {plan.index}</span>
+                    {selectedPlan === plan.index && <CheckCircle2 size={18} className="text-[#4B3E7A]" />}
+                  </div>
+                  <p className="text-[11px] text-gray-500 leading-relaxed mb-3">{plan.explanation}</p>
+                  {plan.groups.map((group) => {
+                    const cautionCount = group.synergyNotes.filter((note) => note.avoid).length;
+                    return <div key={group.id} className="border-t border-gray-100 py-2">
+                      <p className="text-xs font-black text-gray-700">{group.name} · {group.members.length} คน</p>
+                      <p className="text-[11px] text-gray-500 truncate">{group.members.map((member) => member.name).join(', ')}</p>
+                      <p className={`text-[10px] font-bold mt-1 ${cautionCount ? 'text-amber-600' : 'text-emerald-600'}`}>
+                        {cautionCount ? `ควรระวัง ${cautionCount} คู่ — ดูเหตุผลหลังจับกลุ่ม` : 'สมาชิกมีแนวโน้มเสริมกันดี'}
+                      </p>
+                    </div>;
+                  })}
+                </button>
+              ))}
+            </div>
+            {previewPlans.length === 0 && !previewLoading && <p className="text-sm text-gray-500 text-center py-6">ยังไม่มีแผนแนะนำ</p>}
+            {previewError && <p className="text-red-500 text-sm font-bold mt-4">⚠️ {previewError}</p>}
+            <button onClick={confirmMatch} disabled={previewLoading} className="w-full mt-5 py-3 rounded-2xl bg-[#4B3E7A] text-white font-black hover:opacity-90 disabled:opacity-50">
+              {previewLoading ? 'กำลังคำนวณ...' : `ยืนยันใช้แผนที่ ${selectedPlan}`}
+            </button>
+          </div>
+        </div>
+      )}
 
       {showSettings && settingsForm && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 px-4 py-8 overflow-y-auto" onClick={() => !settingsLoading && setShowSettings(false)}>

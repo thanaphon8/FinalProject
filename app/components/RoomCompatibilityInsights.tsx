@@ -97,14 +97,21 @@ export default function RoomCompatibilityInsights({
   const tableKey = resolveTableKey(template);
   const table = TYPE_TABLES[tableKey];
   const templateLabel = TEMPLATE_LABELS[tableKey];
+  // ห้องที่ match ก่อนเพิ่มข้อมูล skill coverage อาจยังไม่มีฟิลด์นี้ใน MongoDB
+  const insights = {
+    bestPairs: roomInsights?.bestPairs ?? [],
+    cautionPairs: roomInsights?.cautionPairs ?? [],
+    recommendedTypes: roomInsights?.recommendedTypes ?? [],
+    skillDataCoverage: roomInsights?.skillDataCoverage ?? { membersWithHistory: 0, totalMembers: 0 },
+  };
 
   const nameOf = (gmail: string) => members.find((m) => m.gmail === gmail)?.name ?? gmail;
 
   const hasAnyData =
-    roomInsights.bestPairs.length > 0 ||
-    roomInsights.cautionPairs.length > 0 ||
-    roomInsights.recommendedTypes.length > 0 ||
-    roomInsights.skillDataCoverage.totalMembers > 0;
+    insights.bestPairs.length > 0 ||
+    insights.cautionPairs.length > 0 ||
+    insights.recommendedTypes.length > 0 ||
+    insights.skillDataCoverage.totalMembers > 0;
   if (!hasAnyData) return null;
 
   return (
@@ -120,11 +127,11 @@ export default function RoomCompatibilityInsights({
         <div className="min-w-0 flex-1">
           <p className="font-black text-[#4B3E7A] text-sm sm:text-base">วิเคราะห์ความเข้ากันของห้องนี้</p>
           <p className="text-xs text-gray-400 mt-0.5">
-            เข้ากันดี {roomInsights.bestPairs.length} คู่
-            {roomInsights.cautionPairs.length > 0 && ` · ควรระวัง ${roomInsights.cautionPairs.length} คู่`}
-            {roomInsights.recommendedTypes.length > 0 && ` · แนะนำ ${roomInsights.recommendedTypes.length} type สำหรับ ${templateLabel}`}
-            {roomInsights.skillDataCoverage.totalMembers > 0 &&
-              ` · มีประวัติประเมิน ${roomInsights.skillDataCoverage.membersWithHistory}/${roomInsights.skillDataCoverage.totalMembers} คน`}
+            เข้ากันดี {insights.bestPairs.length} คู่
+            {insights.cautionPairs.length > 0 && ` · ควรระวัง ${insights.cautionPairs.length} คู่`}
+            {insights.recommendedTypes.length > 0 && ` · แนะนำ ${insights.recommendedTypes.length} type สำหรับ ${templateLabel}`}
+            {insights.skillDataCoverage.totalMembers > 0 &&
+              ` · มีประวัติประเมิน ${insights.skillDataCoverage.membersWithHistory}/${insights.skillDataCoverage.totalMembers} คน`}
           </p>
         </div>
         <ChevronRight size={20} className="text-gray-300 flex-shrink-0" />
@@ -159,21 +166,21 @@ export default function RoomCompatibilityInsights({
             </div>
 
             <div className="p-5 sm:p-6 flex flex-col gap-6 overflow-y-auto bg-[#FAFAFC]">
-              {roomInsights.skillDataCoverage.totalMembers > 0 && (
+              {insights.skillDataCoverage.totalMembers > 0 && (
                 <div>
                   <SectionHeader icon={<Scale size={14} />} iconBg="#EDE9FF" iconColor="#4B3E7A" title="คะแนนประเมินที่ใช้จับกลุ่มด้วย (30%)" />
                   <div className="bg-white border border-[#EDE9FF] rounded-2xl p-3.5 shadow-sm flex items-center justify-between gap-3">
                     <p className="text-xs text-gray-500 leading-relaxed">
                       มีประวัติจากการประเมินเพื่อนร่วมทีมโปรเจกต์ก่อนหน้าแล้ว{' '}
                       <span className="font-black text-[#4B3E7A]">
-                        {roomInsights.skillDataCoverage.membersWithHistory}/{roomInsights.skillDataCoverage.totalMembers} คน
+                        {insights.skillDataCoverage.membersWithHistory}/{insights.skillDataCoverage.totalMembers} คน
                       </span>{' '}
                       — ที่เหลือเริ่มจากคะแนนกลางๆ ไม่เสียเปรียบ
                     </p>
                   </div>
                 </div>
               )}
-              {roomInsights.bestPairs.length > 0 && (
+              {insights.bestPairs.length > 0 && (
                 <div>
                   <SectionHeader
                     icon={<Sparkles size={14} />}
@@ -182,7 +189,7 @@ export default function RoomCompatibilityInsights({
                     title="จับกลุ่มกับใครแล้วลงตัวที่สุดในห้องนี้"
                   />
                   <div className="flex flex-col gap-2">
-                    {roomInsights.bestPairs.map((p, i) => (
+                    {insights.bestPairs.map((p, i) => (
                       <div key={i} className="bg-white border border-emerald-100 rounded-2xl p-3.5 shadow-sm">
                         <div className="flex items-center justify-between gap-2 mb-1.5">
                           <div className="flex items-center gap-2.5 min-w-0">
@@ -207,14 +214,14 @@ export default function RoomCompatibilityInsights({
                   iconColor="#B45309"
                   title="คู่ที่ควรระวัง"
                 />
-                {roomInsights.cautionPairs.length === 0 ? (
+                {insights.cautionPairs.length === 0 ? (
                   <div className="bg-white border border-emerald-100 rounded-2xl p-4 flex items-center gap-3">
                     <span className="text-xl">🎉</span>
                     <p className="text-xs text-gray-500 leading-relaxed">ไม่มีคู่ที่ต้องระวังเป็นพิเศษในห้องนี้ — สมาชิกทุกคนมีสไตล์การทำงานที่เสริมกันได้ดี</p>
                   </div>
                 ) : (
                   <div className="flex flex-col gap-2">
-                    {roomInsights.cautionPairs.map((p, i) => (
+                    {insights.cautionPairs.map((p, i) => (
                       <div key={i} className="bg-white border border-amber-100 rounded-2xl p-3.5 shadow-sm">
                         <div className="flex items-center justify-between gap-2 mb-1.5">
                           <div className="flex items-center gap-2.5 min-w-0">
@@ -232,7 +239,7 @@ export default function RoomCompatibilityInsights({
                 )}
               </div>
 
-              {roomInsights.recommendedTypes.length > 0 && (
+              {insights.recommendedTypes.length > 0 && (
                 <div>
                   <SectionHeader
                     icon={<Sparkles size={14} />}
@@ -241,7 +248,7 @@ export default function RoomCompatibilityInsights({
                     title={`MBTI ที่เข้ากับเพื่อนร่วมห้องนี้ได้ดีในบริบท ${templateLabel}`}
                   />
                   <div className="flex flex-col gap-2">
-                    {roomInsights.recommendedTypes.map((r, i) => (
+                    {insights.recommendedTypes.map((r, i) => (
                       <div key={r.code} className="flex items-center gap-3 bg-white border border-[#EDE9FF] rounded-2xl p-3 shadow-sm">
                         <RankBadge rank={i + 1} tone="neutral" />
                         <div className="w-9 h-9 rounded-xl overflow-hidden flex-shrink-0" style={{ backgroundColor: `${typeColor(r.code)}1A` }}>

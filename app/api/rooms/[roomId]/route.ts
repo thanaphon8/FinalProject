@@ -5,7 +5,7 @@ import { getSessionUser, isRoomHost, isGroupMember } from '@/lib/auth';
 import { dateTimeStringToUtcDate } from '@/lib/date';
 import { fetchMemberTypes, fetchMemberEvalScores, memberKey } from '@/lib/room-member-data';
 import { categoryKeyForCode } from '@/lib/type-composition';
-import { computeGroups, buildRoomInsights, type MatchInputMember } from '@/lib/matching';
+import { buildMatchPlans, buildRoomInsights, type MatchInputMember } from '@/lib/matching';
 import { CRITERIA_KEYS } from '@/lib/peer-evaluation';
 
 interface RoomMemberLike { name: string; gmail?: string; }
@@ -154,6 +154,56 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ ro
       return NextResponse.json({ room: updated!.toObject() });
     }
 
+    case 'previewMatch': {
+      if (!isRoomHost(caller, room)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      if (room.matchDone) return NextResponse.json({ error: 'จับกลุ่มไปแล้ว' }, { status: 400 });
+
+      const roomObj = room.toObject();
+      const membersList = (roomObj.members ?? []) as { name: string; gmail: string; avatarSeed: number; avatarImage?: string | null }[];
+      if (membersList.length === 0) return NextResponse.json({ error: 'ห้องยังไม่มีสมาชิก' }, { status: 400 });
+      const template = (roomObj.template ?? 'programming').toLowerCase();
+      const [typesByName, evalByName] = await Promise.all([
+        fetchMemberTypes(template, membersList),
+        fetchMemberEvalScores(membersList),
+      ]);
+      const matchInput: MatchInputMember[] = membersList.map((m) => {
+        const key = memberKey(m);
+        const t = typesByName[key];
+        const criteria = evalByName[key]?.criteria;
+        return {
+          gmail: m.gmail,
+          name: m.name,
+          avatarSeed: m.avatarSeed,
+          avatarImage: m.avatarImage,
+          code: t?.code ?? '',
+          categoryKey: t?.code ? categoryKeyForCode(template, t.code) : null,
+          evalScore: evalByName[key]?.overall ?? 50,
+          skillVector: CRITERIA_KEYS.map((k) => criteria?.[k] ?? 50),
+          evalCount: evalByName[key]?.count ?? 0,
+        };
+      });
+      const preferredTypes = Array.isArray(body.preferredTypes)
+        ? body.preferredTypes.filter((code: unknown): code is string => typeof code === 'string').slice(0, 16)
+        : [];
+      const plans = buildMatchPlans({
+        members: matchInput,
+        groupSize: roomObj.groupSize ?? 4,
+        template,
+      }, preferredTypes);
+      return NextResponse.json({
+        plans: plans.map((plan) => ({
+          index: plan.index,
+          explanation: plan.explanation,
+          groups: plan.groups.map((group) => ({
+            id: group.id,
+            name: group.name,
+            members: group.members.map((member) => ({ name: member.name, gmail: member.gmail, role: member.role })),
+            synergyNotes: group.synergyNotes,
+          })),
+        })),
+      });
+    }
+
     case 'match': {
       if (!isRoomHost(caller, room)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
@@ -189,11 +239,17 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ ro
         };
       });
 
-      const matchedGroups = computeGroups({
+      const preferredTypes = Array.isArray(body.preferredTypes)
+        ? body.preferredTypes.filter((code: unknown): code is string => typeof code === 'string').slice(0, 16)
+        : [];
+      const plans = buildMatchPlans({
         members: matchInput,
         groupSize: roomObj.groupSize ?? 4,
         template,
-      });
+      }, preferredTypes);
+      const requestedPlan = Number.isInteger(body.planIndex) ? Number(body.planIndex) : 1;
+      const selectedPlan = plans.find((plan) => plan.index === requestedPlan) ?? plans[0];
+      const matchedGroups = selectedPlan.groups;
       // ภาพรวมทั้งห้อง (ข้ามกลุ่ม) — คนละ scope กับ synergyNotes ต่อกลุ่มใน matchedGroups ด้านบน
       const roomInsights = buildRoomInsights(matchInput, template);
 
