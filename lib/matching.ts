@@ -26,6 +26,7 @@ export interface ComputeGroupsInput {
   groupSize: number;
   template: string;
   useEvaluation?: boolean;
+  preferredCodes?: string[];
 }
 
 export interface MatchPlan {
@@ -129,13 +130,19 @@ function totalHammingDistance(member: MatchInputMember, all: MatchInputMember[])
 /** Deterministic greedy farthest-first traversal over MBTI codes: picks the member whose code is most distinct
  * from everyone else's first, then repeatedly the member farthest (by Hamming distance) from all seeds picked so
  * far — spreads group "anchors" across type-space before the compatibility-maximizing placement below fills the rest. */
-function farthestPointSeeds(members: MatchInputMember[], k: number): MatchInputMember[] {
+function farthestPointSeeds(members: MatchInputMember[], k: number, preferredCodes: string[] = []): MatchInputMember[] {
   const n = members.length;
   if (n === 0 || k <= 0) return [];
+  const preferred = new Set(preferredCodes.map((code) => code.toUpperCase()));
+  const preferredIndexes = members
+    .map((member, index) => (preferred.has(member.code.toUpperCase()) ? index : -1))
+    .filter((index) => index >= 0);
+  const seedCandidates = preferredIndexes.length > 0 ? preferredIndexes : members.map((_, index) => index);
 
   let seed1Idx = 0;
   let seed1Val = -Infinity;
-  members.forEach((m, i) => {
+  seedCandidates.forEach((i) => {
+    const m = members[i];
     const v = totalHammingDistance(m, members);
     if (v > seed1Val) { seed1Val = v; seed1Idx = i; }
   });
@@ -146,7 +153,12 @@ function farthestPointSeeds(members: MatchInputMember[], k: number): MatchInputM
   while (seeds.length < Math.min(k, n)) {
     let bestIdx = -1;
     let bestMinDist = -Infinity;
-    members.forEach((m, i) => {
+    const remainingPreferred = preferredIndexes.filter((index) => !seedIdx.has(index));
+    const candidates = remainingPreferred.length > 0
+      ? remainingPreferred
+      : members.map((_, index) => index).filter((index) => !seedIdx.has(index));
+    candidates.forEach((i) => {
+      const m = members[i];
       if (seedIdx.has(i)) return;
       let minDist = Infinity;
       for (const s of seeds) minDist = Math.min(minDist, codeHammingDistance(m.code, s.code));
@@ -167,9 +179,10 @@ function assignByCompatibilityConstruction(
   capacities: number[],
   globalAvgSkill: SkillVector,
   weights: AxisWeights,
-  useEvaluation: boolean
+  useEvaluation: boolean,
+  preferredCodes: string[]
 ): void {
-  const seeds = farthestPointSeeds(members, groups.length);
+  const seeds = farthestPointSeeds(members, groups.length, preferredCodes);
   const seedGmails = new Set(seeds.map((s) => s.gmail));
 
   seeds.forEach((s, i) => {
@@ -350,7 +363,15 @@ export function computeGroups(input: ComputeGroupsInput): MatchedGroupResult[] {
   const capacities = balancedCapacities(members.length, numGroups);
   const weights = resolveAxisWeights(template);
 
-  assignByCompatibilityConstruction(members, groups, capacities, globalAvgSkill, weights, useEvaluation);
+  assignByCompatibilityConstruction(
+    members,
+    groups,
+    capacities,
+    globalAvgSkill,
+    weights,
+    useEvaluation,
+    input.preferredCodes ?? []
+  );
   localSearchImprove(groups, globalAvgSkill, weights, useEvaluation);
 
   return groups.map((g, i) => ({
@@ -389,11 +410,13 @@ export function buildMatchPlans(
   const variants = [
     base,
     [...base].sort((a, b) => a.code.localeCompare(b.code) || b.evalScore - a.evalScore),
-    [...base].sort((a, b) => b.evalScore - a.evalScore || a.code.localeCompare(b.code)),
+  [...base].sort((a, b) =>
+    (input.useEvaluation === false ? 0 : b.evalScore - a.evalScore) || a.code.localeCompare(b.code)
+  ),
   ];
 
   return variants.map((members, index) => {
-    const groups = computeGroups({ ...input, members });
+    const groups = computeGroups({ ...input, members, preferredCodes: [...custom] });
     const avoidPairs = groups.reduce(
       (count, group) => count + group.synergyNotes.filter((note) => note.avoid).length,
       0
