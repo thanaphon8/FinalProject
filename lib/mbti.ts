@@ -35,7 +35,15 @@ function shuffle<T>(arr: T[]): T[] {
  * Keeps `perAxis` (== AXIS_MAX) questions per axis so scoreMbti/buildAxisBars' math is unaffected.
  */
 export function sampleQuestions(bank: MbtiQuestion[], perAxis: number): MbtiQuestion[] {
-  return AXES.flatMap((axis) => shuffle(bank.filter((q) => q.dimension === axis)).slice(0, perAxis));
+  return AXES.flatMap((axis) => {
+    const filtered = bank.filter((q) => q.dimension === axis);
+    // ถ้าคลังคำถามถูกแก้ในอนาคตจนแกนไหนเหลือน้อยกว่าที่ต้องสุ่ม ให้ throw ทันทีแทนที่จะคืนคำถามน้อยกว่าที่ควรแบบเงียบๆ
+    // (ไม่งั้น totalPages/AXIS_MAX ที่หน้า quiz คำนวณไว้ตายตัวจะไม่ตรงกับ questions.length จริง)
+    if (filtered.length < perAxis) {
+      throw new Error(`sampleQuestions: axis ${axis} has only ${filtered.length} questions, need ${perAxis}`);
+    }
+    return shuffle(filtered).slice(0, perAxis);
+  });
 }
 
 const pole = (val: number) => (val <= 3 ? 1 : val >= 5 ? -1 : 0);
